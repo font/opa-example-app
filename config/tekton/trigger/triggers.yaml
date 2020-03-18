@@ -5,7 +5,7 @@ metadata:
   namespace: opa-example-app-trigger
 spec:
   params:
-    - name: gitrevision
+    - name: gitsha
       description: The git revision
       default: master
     - name: gitrepositoryurl
@@ -21,9 +21,18 @@ spec:
         type: git
         params:
         - name: revision
-          value: $(params.gitrevision)
+          value: $(params.gitsha)
         - name: url
           value: $(params.gitrepositoryurl)
+    - apiVersion: tekton.dev/v1alpha1
+      kind: PipelineResource
+      metadata:
+        name: image-source-$(uid)
+      spec:
+        type: image
+        params:
+        - name: url
+          value: quay.io/ifont/opa-example-app:$(params.gitsha) # registry/account/repo:tag
     - apiVersion: tekton.dev/v1alpha1
       kind: PipelineRun
       metadata:
@@ -39,7 +48,7 @@ spec:
               name: source-repo-$(uid)
           - name: image-source
             resourceRef:
-              name: image-source
+              name: image-source-$(uid)
           - name: event-to-sink
             resourceRef:
               name: event-to-sink
@@ -51,7 +60,7 @@ metadata:
   namespace: opa-example-app-trigger
 spec:
   params:
-    - name: gitrevision
+    - name: gitsha
       value: $(body.head_commit.id)
     - name: namespace
       value: opa-example-app-trigger

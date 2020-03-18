@@ -23,7 +23,7 @@ spec:
       taskRef:
         name: build-and-push-image
       conditions:
-      - conditionRef: "go-test"
+      - conditionRef: go-test
         resources:
           - name: source-repo
             resource: source-repo
@@ -46,22 +46,17 @@ spec:
         inputs:
           - name: source
             resource: source-repo
+          - name: image
+            resource: image-source
         outputs:
           - name: event-to-sink
             resource: event-to-sink
       params:
         - name: path
           value: /workspace/source/config/ocp/ #configure: may change according to your source
----
-apiVersion: tekton.dev/v1alpha1
-kind: PipelineResource
-metadata:
-  name: image-source
-spec:
-  type: image
-  params:
-  - name: url
-    value: quay.io/ifont/opa-example-app # registry/account/repo:tag
+        - name: yamlpathtoimage
+          value: spec.template.spec.containers[0].image
+
 ---
 apiVersion: tekton.dev/v1alpha1
 kind: PipelineResource
@@ -144,21 +139,40 @@ spec:
     resources:
       - name: source
         type: git
+      - name: image
+        type: image
     params:
       - name: path
         type: string
         description: Path to the manifests to apply
+      - name: serverdryrun
+        type: string
+        description: If true, run a server-side dry-run
+        default: "false"
+      - name: yamlpathtoimage
+        type: string
+        description:
+          The path to the image to replace in the yaml manifest (arg to yq)
   outputs:
     resources:
     - name: event-to-sink
       type: cloudEvent
   steps:
+    - name: replace-image
+      image: mikefarah/yq
+      command: ["yq"]
+      args:
+        - "w"
+        - "-i"
+        - "$(inputs.params.path)/deployment.yaml"
+        - "$(inputs.params.yamlpathtoimage)"
+        - "$(inputs.resources.image.url)"
     - name: run-oc
       image: quay.io/openshift/origin-cli:4.3
       command: ["oc"]
       args:
-        - "replace"
-        - "--force"
+        - "apply"
+        - "--server-dry-run=$(inputs.params.serverdryrun)"
         - "-f"
         - "$(inputs.params.path)"
 ---
